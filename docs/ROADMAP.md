@@ -8,7 +8,7 @@ A feature is considered complete only after automated tests, documented limitati
 - [x] Select Rust for the core and CLI; establish a Windows x64 release target
 - [x] Add CI for formatting, linting, tests, and Windows release builds
 - [x] Document the current architecture and development workflow
-- [ ] Select the Windows GUI framework and supported Windows baseline
+- [x] Select egui/eframe for the initial native Windows GUI (baseline validation remains ongoing)
 
 ## Phase 1 — Download engine reliability
 
@@ -19,8 +19,8 @@ A feature is considered complete only after automated tests, documented limitati
 - [x] Validate each segment's Content-Range and exact received byte count
 - [x] Assemble segments in order and fall back to sequential transfer when ranges are unsupported or ignored
 - [x] Integration tests using controllable local HTTP servers
-- [ ] Pin resumed representations with ETag / Last-Modified validators
-- [ ] Add bounded retries, backoff, and cancellation
+- [x] Pin parallel range requests to a strong ETag or Last-Modified using If-Range
+- [x] Add bounded retries and exponential backoff for transient segmented-request failures\n- [x] Add GUI cancellation by aborting the active async transfer task
 - [ ] Add crash-safe persisted transfer metadata and stronger end-to-end integrity checks
 
 ## Phase 2 — Product foundation
