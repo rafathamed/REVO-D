@@ -204,14 +204,12 @@ async fn fetch_segment(
         match fetch_segment_once(client, url, &path, range, total).await {
             Ok(received) => return Ok((path, received)),
             Err(error) => {
-                let retryable = matches!(
-                    &error,
-                    SegmentedDownloadError::Request(request)
-                        if request.is_timeout() || request.is_connect()
-                ) || matches!(
-                    &error,
-                    SegmentedDownloadError::TransientHttpStatus(_)
-                );
+                let retryable =
+                    matches!(
+                        &error,
+                        SegmentedDownloadError::Request(request)
+                            if request.is_timeout() || request.is_connect()
+                    ) || matches!(&error, SegmentedDownloadError::TransientHttpStatus(_));
                 let _ = fs::remove_file(&path).await;
                 if !retryable || attempt >= retries {
                     return Err(error);
@@ -245,7 +243,9 @@ async fn fetch_segment_once(
         if response.status().is_server_error()
             || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
         {
-            return Err(SegmentedDownloadError::TransientHttpStatus(response.status()));
+            return Err(SegmentedDownloadError::TransientHttpStatus(
+                response.status(),
+            ));
         }
         return Err(SegmentedDownloadError::InvalidRangeResponse);
     }
