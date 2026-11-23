@@ -1,0 +1,25 @@
+# Build output
+/build/
+/target/
+/dist/
+/out/
+
+# IDE and editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and local state
+*.log
+*.sqlite
+*.sqlite3
+*.db
+.env
+.env.*
+!.env.example
