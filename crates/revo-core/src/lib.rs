@@ -59,7 +59,8 @@ pub async fn download_to_file(
             .get(reqwest::header::CONTENT_RANGE)
             .and_then(|value| value.to_str().ok())
             .ok_or(DownloadError::InvalidContentRange)?;
-        let (start, total) = parse_content_range(value).ok_or(DownloadError::InvalidContentRange)?;
+        let (start, total) =
+            parse_content_range(value).ok_or(DownloadError::InvalidContentRange)?;
         if start != offset {
             return Err(DownloadError::InvalidContentRange);
         }
@@ -70,7 +71,11 @@ pub async fn download_to_file(
 
     let mut stream = response.bytes_stream();
     let mut file = if append {
-        OpenOptions::new().create(true).append(true).open(&part_path).await?
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&part_path)
+            .await?
     } else {
         File::create(&part_path).await?
     };
@@ -98,7 +103,11 @@ fn parse_content_range(value: &str) -> Option<(u64, Option<u64>)> {
     let (range, total) = value.split_once('/')?;
     let (start, _end) = range.split_once('-')?;
     let start = start.parse().ok()?;
-    let total = if total == "*" { None } else { Some(total.parse().ok()?) };
+    let total = if total == "*" {
+        None
+    } else {
+        Some(total.parse().ok()?)
+    };
     Some((start, total))
 }
 
@@ -122,7 +131,10 @@ mod tests {
 
     #[test]
     fn parses_content_range_with_known_total() {
-        assert_eq!(parse_content_range("bytes 10-19/100"), Some((10, Some(100))));
+        assert_eq!(
+            parse_content_range("bytes 10-19/100"),
+            Some((10, Some(100)))
+        );
     }
 
     #[test]
