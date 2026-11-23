@@ -169,6 +169,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "REVO D",
         options,
-        Box::new(|_creation_context| Box::new(RevoApp::default())),
+        Box::new(|_creation_context| Ok(Box::new(RevoApp::default()))),
     )
 }
