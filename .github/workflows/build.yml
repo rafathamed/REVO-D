@@ -28,6 +28,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: revo-d-windows-x64
-          path: target/release/revo-d.exe
+          path: |
+            target/release/revo-d.exe
+            target/release/revo-d-gui.exe
           if-no-files-found: error
           retention-days: 14
