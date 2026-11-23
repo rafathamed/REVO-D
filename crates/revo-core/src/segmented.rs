@@ -15,6 +15,8 @@ pub struct SegmentedDownloadOptions {
     pub connections: usize,
     /// Do not split files smaller than this many bytes per segment.
     pub min_segment_size: u64,
+    /// Number of retries for transient network and server errors per segment.
+    pub retries: usize,
 }
 
 impl Default for SegmentedDownloadOptions {
@@ -22,6 +24,7 @@ impl Default for SegmentedDownloadOptions {
         Self {
             connections: 4,
             min_segment_size: 1_048_576,
+            retries: 2,
         }
     }
 }
@@ -45,6 +48,8 @@ pub enum SegmentedDownloadError {
     Io(#[from] std::io::Error),
     #[error("server returned an invalid range response")]
     InvalidRangeResponse,
+    #[error("server returned a retryable status: {0}")]
+    TransientHttpStatus(reqwest::StatusCode),
     #[error("segment length mismatch: expected {expected} bytes, received {actual}")]
     SegmentLengthMismatch { expected: u64, actual: u64 },
 }
@@ -118,7 +123,14 @@ pub async fn download_segmented_to_file(
     }
 
     let jobs = ranges.iter().enumerate().map(|(index, range)| {
-        fetch_segment(client, url, range_path(&part_path, index), *range, total)
+        fetch_segment(
+            client,
+            url,
+            range_path(&part_path, index),
+            *range,
+            total,
+            options.retries,
+        )
     });
     let results = match try_join_all(jobs).await {
         Ok(results) => results,
@@ -185,7 +197,42 @@ async fn fetch_segment(
     path: PathBuf,
     range: ByteRange,
     total: u64,
+    retries: usize,
 ) -> Result<(PathBuf, u64), SegmentedDownloadError> {
+    let mut attempt = 0;
+    loop {
+        match fetch_segment_once(client, url, &path, range, total).await {
+            Ok(received) => return Ok((path, received)),
+            Err(error) => {
+                let retryable = matches!(
+                    &error,
+                    SegmentedDownloadError::Request(request)
+                        if request.is_timeout() || request.is_connect()
+                ) || matches!(
+                    &error,
+                    SegmentedDownloadError::TransientHttpStatus(_)
+                );
+                let _ = fs::remove_file(&path).await;
+                if !retryable || attempt >= retries {
+                    return Err(error);
+                }
+                attempt += 1;
+                let delay = std::time::Duration::from_millis(
+                    250_u64.saturating_mul(1_u64 << attempt.min(6)),
+                );
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
+}
+
+async fn fetch_segment_once(
+    client: &reqwest::Client,
+    url: &str,
+    path: &Path,
+    range: ByteRange,
+    total: u64,
+) -> Result<u64, SegmentedDownloadError> {
     let response = client
         .get(url)
         .header(
@@ -195,6 +242,11 @@ async fn fetch_segment(
         .send()
         .await?;
     if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        if response.status().is_server_error()
+            || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            return Err(SegmentedDownloadError::TransientHttpStatus(response.status()));
+        }
         return Err(SegmentedDownloadError::InvalidRangeResponse);
     }
     let content_range = response
@@ -206,7 +258,7 @@ async fn fetch_segment(
         return Err(SegmentedDownloadError::InvalidRangeResponse);
     }
 
-    let mut file = File::create(&path).await?;
+    let mut file = File::create(path).await?;
     let mut stream = response.bytes_stream();
     let mut received = 0_u64;
     use futures_util::StreamExt;
@@ -229,7 +281,7 @@ async fn fetch_segment(
             actual: received,
         });
     }
-    Ok((path, received))
+    Ok(received)
 }
 
 fn split_ranges(total: u64, count: usize) -> Vec<ByteRange> {
