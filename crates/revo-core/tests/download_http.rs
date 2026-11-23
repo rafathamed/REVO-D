@@ -79,7 +79,6 @@ fn serve_once(body: &'static [u8], honor_range: bool) -> (String, thread::JoinHa
     (format!("http://{address}/file"), handle)
 }
 
-
 fn serve_short_range(
     body: &'static [u8],
     start: usize,
@@ -97,7 +96,7 @@ fn serve_short_range(
                 break;
             }
             request.extend_from_slice(&buffer[..read]);
-            if request.windows(4).any(|window| window == b"\\r\\n\\r\\n") {
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
                 break;
             }
         }
@@ -106,7 +105,7 @@ fn serve_short_range(
         let payload = &body[start..=end];
         write!(
             stream,
-            "HTTP/1.1 206 Partial Content\\r\\nContent-Length: {}\\r\\nContent-Range: bytes {}-{}/{}\\r\\nConnection: close\\r\\n\\r\\n",
+            "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nConnection: close\r\n\r\n",
             payload.len(),
             start,
             end,
