@@ -1,6 +1,4 @@
-use revo_core::{
-    download_segmented_to_file, SegmentedDownloadOptions,
-};
+use revo_core::{download_segmented_to_file, SegmentedDownloadOptions};
 use std::{
     fs,
     io::{Read, Write},
@@ -41,7 +39,9 @@ fn serve_ranges(body: Vec<u8>, get_requests: usize) -> (String, thread::JoinHand
                         break;
                     }
                     request.extend_from_slice(&buffer[..count]);
-                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    if request.windows(4).any(|window| window == b"\r
+\r
+") {
                         break;
                     }
                 }
@@ -49,7 +49,12 @@ fn serve_ranges(body: Vec<u8>, get_requests: usize) -> (String, thread::JoinHand
                 if request.starts_with("HEAD ") {
                     write!(
                         stream,
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        "HTTP/1.1 200 OK\r
+Content-Length: {}\r
+Accept-Ranges: bytes\r
+Connection: close\r
+\r
+",
                         body.len()
                     )
                     .expect("write HEAD response");
@@ -69,7 +74,12 @@ fn serve_ranges(body: Vec<u8>, get_requests: usize) -> (String, thread::JoinHand
                 let payload = &body[start..=end];
                 write!(
                     stream,
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 206 Partial Content\r
+Content-Length: {}\r
+Content-Range: bytes {}-{}/{}\r
+Connection: close\r
+\r
+",
                     payload.len(),
                     start,
                     end,
