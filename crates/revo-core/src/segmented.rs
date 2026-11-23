@@ -252,12 +252,10 @@ async fn fetch_segment_once(
     total: u64,
     validator: Option<&(reqwest::header::HeaderName, reqwest::header::HeaderValue)>,
 ) -> Result<u64, SegmentedDownloadError> {
-    let mut request = client
-        .get(url)
-        .header(
-            reqwest::header::RANGE,
-            format!("bytes={}-{}", range.start, range.end),
-        );
+    let mut request = client.get(url).header(
+        reqwest::header::RANGE,
+        format!("bytes={}-{}", range.start, range.end),
+    );
     if let Some((_, value)) = validator {
         request = request.header(reqwest::header::IF_RANGE, value);
     }
