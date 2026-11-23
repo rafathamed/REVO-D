@@ -64,7 +64,7 @@ pub async fn download_to_file(
                 .ok_or(DownloadError::InvalidContentRange)?;
             let (start, end, total) =
                 parse_content_range(value).ok_or(DownloadError::InvalidContentRange)?;
-            if start != offset || total.is_some_and(|total| end + 1 != total) {
+            if start != offset || total.is_some_and(|total| end.checked_add(1) != Some(total)) {
                 return Err(DownloadError::InvalidContentRange);
             }
             (offset, total, offset > 0, Some(end - start + 1))
