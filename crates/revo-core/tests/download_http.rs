@@ -177,7 +177,6 @@ async fn restarts_partial_file_when_server_ignores_range() {
     fs::remove_file(path).expect("cleanup destination");
 }
 
-
 #[tokio::test]
 async fn rejects_partial_range_that_does_not_reach_end_of_file() {
     let body = b"resumable download payload";
@@ -192,7 +191,13 @@ async fn rejects_partial_range_that_does_not_reach_end_of_file() {
     assert!(matches!(result, Err(DownloadError::InvalidContentRange)));
     let request = server.join().expect("server thread");
     assert!(request.to_ascii_lowercase().contains("range: bytes=10-"));
-    assert!(!path.exists(), "incomplete response must not become final file");
-    assert_eq!(fs::read(&part_path).expect("read retained partial"), &body[..split]);
+    assert!(
+        !path.exists(),
+        "incomplete response must not become final file"
+    );
+    assert_eq!(
+        fs::read(&part_path).expect("read retained partial"),
+        &body[..split]
+    );
     fs::remove_file(part_path).expect("cleanup partial file");
 }
