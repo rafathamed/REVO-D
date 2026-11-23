@@ -32,7 +32,7 @@ fn serve_ranges(
     let retried = Arc::new(AtomicBool::new(false));
     let handle = thread::spawn(move || {
         let mut workers = Vec::new();
-        for _ in 0..=get_requests + if retry_once { 1 } else { 0 } {
+        for _ in 0..=(get_requests + if retry_once { 1 } else { 0 }) {
             let (mut stream, _) = listener.accept().expect("accept request");
             let body = Arc::clone(&body);
             let retried = Arc::clone(&retried);
