@@ -1,0 +1,16 @@
+[package]
+name = "revo-d-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "revo-d-gui"
+path = "src/main.rs"
+
+[dependencies]
+eframe.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+revo-core = { path = "../../crates/revo-core" }
