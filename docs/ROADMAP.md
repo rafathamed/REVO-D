@@ -1,23 +1,27 @@
 # REVO D — Engineering Roadmap
 
-This roadmap separates foundational reliability from advanced protocol and integration work. A feature is not considered complete until it has automated tests, documented limitations, and platform validation where applicable.
+A feature is considered complete only after automated tests, documented limitations, and platform validation where applicable.
 
 ## Phase 0 — Repository and engineering foundation
 
 - [x] Initialize repository documentation and ignore rules
-- [ ] Choose implementation language, UI framework, and supported Windows baseline
-- [ ] Add CI for formatting, linting, unit tests, and dependency auditing
-- [ ] Define architecture decision records and contribution workflow
+- [x] Select Rust for the core and CLI; establish a Windows x64 release target
+- [x] Add CI for formatting, linting, tests, and Windows release builds
+- [x] Document the current architecture and development workflow
+- [ ] Select the Windows GUI framework and supported Windows baseline
 
 ## Phase 1 — Download engine reliability
 
-- [ ] HTTP/HTTPS single-stream downloads
-- [ ] Resume using validators (ETag / Last-Modified) and verified range support
-- [ ] Atomic writes and crash-safe persisted metadata
-- [ ] Retry policy with bounded backoff and cancellation
-- [ ] Concurrent segmented downloads with server capability detection
-- [ ] Segment scheduling, integrity checks, and safe single-stream fallback
-- [ ] Integration tests using controllable local HTTP servers
+- [x] HTTP/HTTPS single-stream downloads
+- [x] Resume from an existing partial file using HTTP Range and validate the returned starting offset
+- [x] Stream to a temporary file, flush/sync, and rename on completion
+- [x] Concurrent segmented downloads with server capability detection
+- [x] Validate each segment's Content-Range and exact received byte count
+- [x] Assemble segments in order and fall back to sequential transfer when ranges are unsupported or ignored
+- [x] Integration tests using controllable local HTTP servers
+- [ ] Pin resumed representations with ETag / Last-Modified validators
+- [ ] Add bounded retries, backoff, and cancellation
+- [ ] Add crash-safe persisted transfer metadata and stronger end-to-end integrity checks
 
 ## Phase 2 — Product foundation
 
