@@ -24,7 +24,7 @@ cargo test --workspace
 cargo build --release --workspace
 ```
 
-## Desktop GUI (early preview)\n\nThe `revo-d-gui` Windows executable provides an initial desktop window for entering an HTTP(S) URL, destination path, and connection count, then starting a download. This is an early functional shell: it currently shows the final result rather than live byte-by-byte progress, and it does not yet include a persistent queue or installer.\n\n## CLI usage
+## Desktop GUI (early preview)\n\nThe `revo-d-gui` Windows executable provides an initial desktop window for entering an HTTP(S) URL, destination path, and connection count, then starting or cancelling a download. Cancellation stops the active transfer task; sequential partial data remains in the `.part` file for a later resume. This is an early functional shell: it currently shows the final result rather than live byte-by-byte progress, and it does not yet include a persistent queue or download history. A Windows installer is produced by the release workflow.\n\n## CLI usage
 
 ```sh
 revo-d download https://example.com/file.zip --output file.zip
