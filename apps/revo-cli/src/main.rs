@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
     if std::env::args_os().len() == 1 {
         let mut command = Args::command();
         command.print_help()?;
-        println!(\n            "\\n\\nREVO D is currently a command-line download engine, not a graphical installer."\n        );
+        println!("\\n\\nREVO D is currently a command-line download engine, not a graphical installer.");
         println!("Example: revo-d download https://example.com/file.zip --output file.zip");
         println!("\nPress Enter to close this window...");
         let mut input = String::new();
