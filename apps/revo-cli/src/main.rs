@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use revo_core::download_to_file;
+use revo_core::{download_segmented_to_file, SegmentedDownloadOptions};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -17,25 +17,34 @@ enum Command {
         url: String,
         #[arg(short, long)]
         output: PathBuf,
+        /// Maximum simultaneous HTTP range requests (set to 1 to disable segmentation).
+        #[arg(short = 'c', long, default_value_t = 4)]
+        connections: usize,
     },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     match Args::parse().command {
-        Command::Download { url, output } => {
+        Command::Download { url, output, connections } => {
             let client = reqwest::Client::builder()
                 .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .context("failed to initialize HTTP client")?;
-            let report = download_to_file(&client, &url, &output)
-                .await
-                .with_context(|| format!("download failed: {url}"))?;
+            let report = download_segmented_to_file(
+                &client,
+                &url,
+                &output,
+                &SegmentedDownloadOptions { connections, ..Default::default() },
+            )
+            .await
+            .with_context(|| format!("download failed: {url}"))?;
             println!(
-                "Saved {} bytes to {} (resumed from byte {})",
+                "Saved {} bytes to {} using {} segment(s){}",
                 report.bytes_written,
                 report.destination.display(),
-                report.resumed_from
+                report.segments,
+                if report.used_fallback { " (sequential fallback)" } else { "" }
             );
         }
     }
