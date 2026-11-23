@@ -39,9 +39,7 @@ fn serve_ranges(body: Vec<u8>, get_requests: usize) -> (String, thread::JoinHand
                         break;
                     }
                     request.extend_from_slice(&buffer[..count]);
-                    if request.windows(4).any(|window| window == b"\r
-\r
-") {
+                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
                         break;
                     }
                 }
