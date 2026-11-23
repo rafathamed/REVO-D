@@ -39,7 +39,7 @@ fn serve_once(body: &'static [u8], honor_range: bool) -> (String, thread::JoinHa
         let range = request_text.lines().find_map(|line| {
             line.to_ascii_lowercase()
                 .strip_prefix("range: bytes=")
-                .and_then(|value| value.trim().parse::<usize>().ok())
+                .and_then(|value| value.trim().strip_suffix("-")?.parse::<usize>().ok())
         });
 
         if honor_range {
