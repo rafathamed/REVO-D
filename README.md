@@ -2,7 +2,7 @@
 
 A modern, extensible download manager built around a Rust transfer engine.
 
-> Project status: working command-line foundation. The Windows GUI, persistent queue, browser integration, and advanced controls are still under development.
+> Project status: working command-line foundation. The first native Windows GUI is now under development. Persistent queue, browser integration, live transfer progress, and advanced controls remain future work.
 
 ## Current capabilities
 
@@ -24,7 +24,7 @@ cargo test --workspace
 cargo build --release --workspace
 ```
 
-## CLI usage
+## Desktop GUI (early preview)\n\nThe `revo-d-gui` Windows executable provides an initial desktop window for entering an HTTP(S) URL, destination path, and connection count, then starting a download. This is an early functional shell: it currently shows the final result rather than live byte-by-byte progress, and it does not yet include a persistent queue or installer.\n\n## CLI usage
 
 ```sh
 revo-d download https://example.com/file.zip --output file.zip
