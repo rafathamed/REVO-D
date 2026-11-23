@@ -101,6 +101,24 @@ pub async fn download_segmented_to_file(
         Some(length) if length > 0 => length,
         _ => return sequential_fallback(client, url, &destination).await,
     };
+    // Pin all parallel requests to the same representation when the server
+    // supplies a strong ETag, or fall back to Last-Modified.
+    let validator = head
+        .headers()
+        .get(reqwest::header::ETAG)
+        .filter(|value| {
+            value
+                .to_str()
+                .is_ok_and(|tag| !tag.trim_start().starts_with("W/"))
+        })
+        .cloned()
+        .map(|value| (reqwest::header::ETAG, value))
+        .or_else(|| {
+            head.headers()
+                .get(reqwest::header::LAST_MODIFIED)
+                .cloned()
+                .map(|value| (reqwest::header::LAST_MODIFIED, value))
+        });
     let accepts_ranges = head
         .headers()
         .get(reqwest::header::ACCEPT_RANGES)
@@ -129,6 +147,7 @@ pub async fn download_segmented_to_file(
             range_path(&part_path, index),
             *range,
             total,
+            validator.clone(),
             options.retries,
         )
     });
@@ -197,11 +216,12 @@ async fn fetch_segment(
     path: PathBuf,
     range: ByteRange,
     total: u64,
+    validator: Option<(reqwest::header::HeaderName, reqwest::header::HeaderValue)>,
     retries: usize,
 ) -> Result<(PathBuf, u64), SegmentedDownloadError> {
     let mut attempt = 0;
     loop {
-        match fetch_segment_once(client, url, &path, range, total).await {
+        match fetch_segment_once(client, url, &path, range, total, validator.as_ref()).await {
             Ok(received) => return Ok((path, received)),
             Err(error) => {
                 let retryable =
@@ -230,15 +250,18 @@ async fn fetch_segment_once(
     path: &Path,
     range: ByteRange,
     total: u64,
+    validator: Option<&(reqwest::header::HeaderName, reqwest::header::HeaderValue)>,
 ) -> Result<u64, SegmentedDownloadError> {
-    let response = client
+    let mut request = client
         .get(url)
         .header(
             reqwest::header::RANGE,
             format!("bytes={}-{}", range.start, range.end),
-        )
-        .send()
-        .await?;
+        );
+    if let Some((_, value)) = validator {
+        request = request.header(reqwest::header::IF_RANGE, value);
+    }
+    let response = request.send().await?;
     if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
         if response.status().is_server_error()
             || response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
