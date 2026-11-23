@@ -95,7 +95,7 @@ pub async fn download_segmented_to_file(
         .headers()
         .get(reqwest::header::ACCEPT_RANGES)
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.split(',').any(|item| item.trim().eq_ignore_ascii_case("bytes")));
+        .is_some_and(|value| {\n            value\n                .split(',')\n                .any(|item| item.trim().eq_ignore_ascii_case("bytes"))\n        });
     if !accepts_ranges || total < options.min_segment_size.saturating_mul(2) {
         return sequential_fallback(client, url, &destination).await;
     }
