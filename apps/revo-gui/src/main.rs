@@ -9,6 +9,7 @@ use std::time::Duration;
 struct DownloadState {
     running: bool,
     message: String,
+    abort: Option<tokio::task::AbortHandle>,
 }
 
 struct RevoApp {
@@ -27,6 +28,7 @@ impl Default for RevoApp {
             state: Arc::new(Mutex::new(DownloadState {
                 running: false,
                 message: "Ready — enter a download URL to begin.".to_owned(),
+                abort: None,
             })),
         }
     }
@@ -53,16 +55,17 @@ impl RevoApp {
         let shared = Arc::clone(&self.state);
         if let Ok(mut state) = shared.lock() {
             state.running = true;
+            state.abort = None;
             state.message = format!("Connecting to {url}");
         }
 
         std::thread::spawn(move || {
-            let result = tokio::runtime::Builder::new_multi_thread()
+            let result = match tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
-                .map_err(|error| error.to_string())
-                .and_then(|runtime| {
-                    runtime.block_on(async move {
+            {
+                Ok(runtime) => runtime.block_on(async move {
+                    let task = tokio::spawn(async move {
                         let client = reqwest::Client::builder()
                             .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
                             .build()
@@ -78,11 +81,26 @@ impl RevoApp {
                         )
                         .await
                         .map_err(|error| error.to_string())
-                    })
-                });
+                    });
+
+                    if let Ok(mut state) = shared.lock() {
+                        state.abort = Some(task.abort_handle());
+                    }
+
+                    match task.await {
+                        Ok(result) => result,
+                        Err(error) if error.is_cancelled() => {
+                            Err("Download cancelled. Any resumable partial data was retained.".to_owned())
+                        }
+                        Err(error) => Err(format!("Download task failed: {error}")),
+                    }
+                }),
+                Err(error) => Err(format!("Could not start the async runtime: {error}")),
+            };
 
             if let Ok(mut state) = shared.lock() {
                 state.running = false;
+                state.abort = None;
                 state.message = match result {
                     Ok(report) => format!(
                         "Completed: {} bytes saved to {} ({} segment(s)).",
@@ -90,10 +108,24 @@ impl RevoApp {
                         report.destination.display(),
                         report.segments
                     ),
-                    Err(error) => format!("Download failed: {error}"),
+                    Err(error) => format!(" {error}").trim().to_owned(),
                 };
             }
         });
+    }
+
+    fn cancel_download(&self) {
+        let abort = self
+            .state
+            .lock()
+            .ok()
+            .and_then(|state| state.abort.clone());
+        if let Some(abort) = abort {
+            abort.abort();
+            if let Ok(mut state) = self.state.lock() {
+                state.message = "Cancelling download…".to_owned();
+            }
+        }
     }
 }
 
@@ -140,12 +172,20 @@ impl eframe::App for RevoApp {
             });
 
             ui.add_space(12.0);
-            if ui
-                .add_enabled(!running, egui::Button::new("Start download"))
-                .clicked()
-            {
-                self.start_download();
-            }
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(!running, egui::Button::new("Start download"))
+                    .clicked()
+                {
+                    self.start_download();
+                }
+                if ui
+                    .add_enabled(running, egui::Button::new("Cancel download"))
+                    .clicked()
+                {
+                    self.cancel_download();
+                }
+            });
 
             ui.separator();
             ui.heading("Status");
