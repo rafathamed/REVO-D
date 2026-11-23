@@ -68,21 +68,21 @@ impl RevoApp {
                     let task_state = Arc::clone(&shared);
                     runtime.block_on(async move {
                         let task = tokio::spawn(async move {
-                        let client = reqwest::Client::builder()
-                            .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
-                            .build()
-                            .map_err(|error| error.to_string())?;
-                        download_segmented_to_file(
-                            &client,
-                            &url,
-                            &destination,
-                            &SegmentedDownloadOptions {
-                                connections,
-                                ..Default::default()
-                            },
-                        )
-                        .await
-                        .map_err(|error| error.to_string())
+                            let client = reqwest::Client::builder()
+                                .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
+                                .build()
+                                .map_err(|error| error.to_string())?;
+                            download_segmented_to_file(
+                                &client,
+                                &url,
+                                &destination,
+                                &SegmentedDownloadOptions {
+                                    connections,
+                                    ..Default::default()
+                                },
+                            )
+                            .await
+                            .map_err(|error| error.to_string())
                         });
 
                         if let Ok(mut state) = task_state.lock() {
@@ -119,11 +119,7 @@ impl RevoApp {
     }
 
     fn cancel_download(&self) {
-        let abort = self
-            .state
-            .lock()
-            .ok()
-            .and_then(|state| state.abort.clone());
+        let abort = self.state.lock().ok().and_then(|state| state.abort.clone());
         if let Some(abort) = abort {
             abort.abort();
             if let Ok(mut state) = self.state.lock() {
