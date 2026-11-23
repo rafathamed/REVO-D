@@ -26,7 +26,7 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<()> {
     match Args::parse().command {
-        Command::Download { url, output, connections } => {
+        Command::Download {\n            url,\n            output,\n            connections,\n        } => {
             let client = reqwest::Client::builder()
                 .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
                 .build()
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
                 &client,
                 &url,
                 &output,
-                &SegmentedDownloadOptions { connections, ..Default::default() },
+                &SegmentedDownloadOptions {\n                    connections,\n                    ..Default::default()\n                },
             )
             .await
             .with_context(|| format!("download failed: {url}"))?;
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
                 report.bytes_written,
                 report.destination.display(),
                 report.segments,
-                if report.used_fallback { " (sequential fallback)" } else { "" }
+                if report.used_fallback {\n                    " (sequential fallback)"\n                } else {\n                    ""\n                }
             );
         }
     }
