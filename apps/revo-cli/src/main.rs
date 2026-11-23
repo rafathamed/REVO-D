@@ -1,7 +1,7 @@
-use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use revo_core::download_to_file;
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "revo-d", version, about = "REVO D download manager")]
