@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use revo_core::{download_segmented_to_file, SegmentedDownloadOptions};
 use std::path::PathBuf;
 
@@ -25,6 +25,19 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // A console executable opened by double-click has no command-line arguments.
+    // Keep the window visible and explain the supported usage instead of flashing closed.
+    if std::env::args_os().len() == 1 {
+        let mut command = Args::command();
+        command.print_help()?;
+        println!("\n\nREVO D is currently a command-line download engine, not a graphical installer.");
+        println!("Example: revo-d download https://example.com/file.zip --output file.zip");
+        println!("\nPress Enter to close this window...");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        return Ok(());
+    }
+
     match Args::parse().command {
         Command::Download {
             url,
