@@ -98,7 +98,7 @@ impl RevoApp {
                             Err(error) => Err(format!("Download task failed: {error}")),
                         }
                     })
-                },
+                }
                 Err(error) => Err(format!("Could not start the async runtime: {error}")),
             };
 
