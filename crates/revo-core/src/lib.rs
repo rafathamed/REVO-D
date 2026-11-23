@@ -149,7 +149,6 @@ mod tests {
     }
 }
 
-
 mod segmented;
 pub use segmented::{
     download_segmented_to_file, SegmentedDownloadError, SegmentedDownloadOptions,
