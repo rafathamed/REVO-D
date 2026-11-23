@@ -1,9 +1,11 @@
 //! REVO D download engine foundation.
-//! Downloads are streamed to a sibling .part file and promoted only after success.
-use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::{
+    fs::{File, OpenOptions},
+    io::AsyncWriteExt,
+};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
@@ -13,28 +15,65 @@ pub enum DownloadError {
     Io(#[from] std::io::Error),
     #[error("server returned unsuccessful status: {0}")]
     HttpStatus(reqwest::StatusCode),
+    #[error("server returned an invalid Content-Range header")]
+    InvalidContentRange,
 }
+
 #[derive(Debug, Clone)]
 pub struct DownloadReport {
     pub destination: PathBuf,
     pub bytes_written: u64,
     pub total_bytes: Option<u64>,
+    pub resumed_from: u64,
 }
 
-/// Stream an HTTP(S) resource to disk without buffering it all in memory.
-/// Failed transfers leave a .part file for future resume support.
+/// Download an HTTP(S) resource, resuming from an existing .part file when
+/// the server supports byte ranges. If the server ignores Range (HTTP 200),
+/// the partial file is safely restarted rather than appended incorrectly.
 pub async fn download_to_file(
-    client: &reqwest::Client, url: &str, destination: impl AsRef<Path>,
+    client: &reqwest::Client,
+    url: &str,
+    destination: impl AsRef<Path>,
 ) -> Result<DownloadReport, DownloadError> {
     let destination = destination.as_ref().to_path_buf();
     let part_path = append_suffix(&destination, ".part");
-    let response = client.get(url).send().await?;
-    if !response.status().is_success() {
-        return Err(DownloadError::HttpStatus(response.status()));
+    let offset = match tokio::fs::metadata(&part_path).await {
+        Ok(metadata) => metadata.len(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(error) => return Err(error.into()),
+    };
+
+    let mut request = client.get(url);
+    if offset > 0 {
+        request = request.header(reqwest::header::RANGE, format!("bytes={offset}-"));
     }
-    let total_bytes = response.content_length();
+    let response = request.send().await?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(DownloadError::HttpStatus(status));
+    }
+
+    let (resume_offset, total_bytes, append) = if status == reqwest::StatusCode::PARTIAL_CONTENT {
+        let value = response
+            .headers()
+            .get(reqwest::header::CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .ok_or(DownloadError::InvalidContentRange)?;
+        let (start, total) = parse_content_range(value).ok_or(DownloadError::InvalidContentRange)?;
+        if start != offset {
+            return Err(DownloadError::InvalidContentRange);
+        }
+        (offset, total, offset > 0)
+    } else {
+        (0, response.content_length(), false)
+    };
+
     let mut stream = response.bytes_stream();
-    let mut file = File::create(&part_path).await?;
+    let mut file = if append {
+        OpenOptions::new().create(true).append(true).open(&part_path).await?
+    } else {
+        File::create(&part_path).await?
+    };
     let mut bytes_written = 0_u64;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
@@ -44,19 +83,56 @@ pub async fn download_to_file(
     file.flush().await?;
     file.sync_all().await?;
     drop(file);
+
     tokio::fs::rename(&part_path, &destination).await?;
-    Ok(DownloadReport { destination, bytes_written, total_bytes })
+    Ok(DownloadReport {
+        destination,
+        bytes_written,
+        total_bytes,
+        resumed_from: resume_offset,
+    })
 }
+
+fn parse_content_range(value: &str) -> Option<(u64, Option<u64>)> {
+    let value = value.strip_prefix("bytes ")?;
+    let (range, total) = value.split_once('/')?;
+    let (start, _end) = range.split_once('-')?;
+    let start = start.parse().ok()?;
+    let total = if total == "*" { None } else { Some(total.parse().ok()?) };
+    Some((start, total))
+}
+
 fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(suffix);
     PathBuf::from(name)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn part_path_preserves_original_extension() {
-        assert_eq!(append_suffix(Path::new("archive.zip"), ".part"), PathBuf::from("archive.zip.part"));
+        assert_eq!(
+            append_suffix(Path::new("archive.zip"), ".part"),
+            PathBuf::from("archive.zip.part")
+        );
+    }
+
+    #[test]
+    fn parses_content_range_with_known_total() {
+        assert_eq!(parse_content_range("bytes 10-19/100"), Some((10, Some(100))));
+    }
+
+    #[test]
+    fn parses_content_range_with_unknown_total() {
+        assert_eq!(parse_content_range("bytes 10-19/*"), Some((10, None)));
+    }
+
+    #[test]
+    fn rejects_invalid_content_range() {
+        assert_eq!(parse_content_range("items 10-19/100"), None);
+        assert_eq!(parse_content_range("bytes nope"), None);
     }
 }
