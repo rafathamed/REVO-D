@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::{
     fs::{self, File},
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::AsyncWriteExt,
 };
 
 use crate::{download_to_file, DownloadError, DownloadReport};
@@ -120,7 +120,7 @@ pub async fn download_segmented_to_file(
     let mut bytes_written = 0_u64;
     for (path, expected) in &results {
         let mut input = File::open(path).await?;
-        let mut copied = tokio::io::copy(&mut input, &mut output).await?;
+        let copied = tokio::io::copy(&mut input, &mut output).await?;
         if copied != *expected {
             return Err(SegmentedDownloadError::SegmentLengthMismatch {
                 expected: *expected,
@@ -128,8 +128,6 @@ pub async fn download_segmented_to_file(
             });
         }
         bytes_written += copied;
-        copied = 0;
-        let _ = copied;
     }
     output.flush().await?;
     output.sync_all().await?;
