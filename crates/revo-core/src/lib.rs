@@ -17,6 +17,8 @@ pub enum DownloadError {
     HttpStatus(reqwest::StatusCode),
     #[error("server returned an invalid Content-Range header")]
     InvalidContentRange,
+    #[error("incomplete response: expected {expected} bytes, received {actual}")]
+    IncompleteResponse { expected: u64, actual: u64 },
 }
 
 #[derive(Debug, Clone)]
@@ -53,21 +55,23 @@ pub async fn download_to_file(
         return Err(DownloadError::HttpStatus(status));
     }
 
-    let (resume_offset, total_bytes, append) = if status == reqwest::StatusCode::PARTIAL_CONTENT {
-        let value = response
-            .headers()
-            .get(reqwest::header::CONTENT_RANGE)
-            .and_then(|value| value.to_str().ok())
-            .ok_or(DownloadError::InvalidContentRange)?;
-        let (start, total) =
-            parse_content_range(value).ok_or(DownloadError::InvalidContentRange)?;
-        if start != offset {
-            return Err(DownloadError::InvalidContentRange);
-        }
-        (offset, total, offset > 0)
-    } else {
-        (0, response.content_length(), false)
-    };
+    let (resume_offset, total_bytes, append, expected_response_bytes) =
+        if status == reqwest::StatusCode::PARTIAL_CONTENT {
+            let value = response
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok())
+                .ok_or(DownloadError::InvalidContentRange)?;
+            let (start, end, total) =
+                parse_content_range(value).ok_or(DownloadError::InvalidContentRange)?;
+            if start != offset || total.is_some_and(|total| end + 1 != total) {
+                return Err(DownloadError::InvalidContentRange);
+            }
+            (offset, total, offset > 0, Some(end - start + 1))
+        } else {
+            let length = response.content_length();
+            (0, length, false, length)
+        };
 
     let mut stream = response.bytes_stream();
     let mut file = if append {
@@ -89,6 +93,15 @@ pub async fn download_to_file(
     file.sync_all().await?;
     drop(file);
 
+    if let Some(expected) = expected_response_bytes {
+        if bytes_written != expected {
+            return Err(DownloadError::IncompleteResponse {
+                expected,
+                actual: bytes_written,
+            });
+        }
+    }
+
     tokio::fs::rename(&part_path, &destination).await?;
     Ok(DownloadReport {
         destination,
@@ -98,17 +111,25 @@ pub async fn download_to_file(
     })
 }
 
-fn parse_content_range(value: &str) -> Option<(u64, Option<u64>)> {
+fn parse_content_range(value: &str) -> Option<(u64, u64, Option<u64>)> {
     let value = value.strip_prefix("bytes ")?;
     let (range, total) = value.split_once('/')?;
-    let (start, _end) = range.split_once('-')?;
+    let (start, end) = range.split_once('-')?;
     let start = start.parse().ok()?;
+    let end = end.parse().ok()?;
+    if end < start {
+        return None;
+    }
     let total = if total == "*" {
         None
     } else {
-        Some(total.parse().ok()?)
+        let total = total.parse().ok()?;
+        if total <= end {
+            return None;
+        }
+        Some(total)
     };
-    Some((start, total))
+    Some((start, end, total))
 }
 
 fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
@@ -133,19 +154,21 @@ mod tests {
     fn parses_content_range_with_known_total() {
         assert_eq!(
             parse_content_range("bytes 10-19/100"),
-            Some((10, Some(100)))
+            Some((10, 19, Some(100)))
         );
     }
 
     #[test]
     fn parses_content_range_with_unknown_total() {
-        assert_eq!(parse_content_range("bytes 10-19/*"), Some((10, None)));
+        assert_eq!(parse_content_range("bytes 10-19/*"), Some((10, 19, None)));
     }
 
     #[test]
     fn rejects_invalid_content_range() {
         assert_eq!(parse_content_range("items 10-19/100"), None);
         assert_eq!(parse_content_range("bytes nope"), None);
+        assert_eq!(parse_content_range("bytes 19-10/100"), None);
+        assert_eq!(parse_content_range("bytes 10-100/100"), None);
     }
 }
 
