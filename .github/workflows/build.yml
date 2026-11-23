@@ -27,7 +27,7 @@ jobs:
       - run: cargo build --release --workspace
       - name: Build Windows installer
         shell: pwsh
-        run: '& "$env:ProgramFiles(x86)\\Inno Setup 6\\ISCC.exe" installer\\revo-d.iss'
+        run: '& "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe" installer\\revo-d.iss'
       - uses: actions/upload-artifact@v4
         with:
           name: revo-d-windows-x64
