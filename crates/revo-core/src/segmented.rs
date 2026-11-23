@@ -104,9 +104,10 @@ pub async fn download_segmented_to_file(
         return sequential_fallback(client, url, &destination).await;
     }
 
-    let ranges = split_ranges(total, connections.min(
-        (total / options.min_segment_size.max(1)).max(1) as usize
-    ));
+    let ranges = split_ranges(
+        total,
+        connections.min((total / options.min_segment_size.max(1)).max(1) as usize),
+    );
     if ranges.len() < 2 {
         return sequential_fallback(client, url, &destination).await;
     }
@@ -117,10 +118,7 @@ pub async fn download_segmented_to_file(
     let results = match try_join_all(jobs).await {
         Ok(results) => results,
         Err(error) => {
-            let should_fallback = matches!(
-                &error,
-                SegmentedDownloadError::InvalidRangeResponse
-            );
+            let should_fallback = matches!(&error, SegmentedDownloadError::InvalidRangeResponse);
             for index in 0..ranges.len() {
                 let _ = fs::remove_file(range_path(&part_path, index)).await;
             }
