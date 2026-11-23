@@ -235,7 +235,7 @@ fn split_ranges(total: u64, count: usize) -> Vec<ByteRange> {
     let mut start = 0_u64;
     (0..count)
         .map(|index| {
-            let length = base + u64::from((index as u64) < remainder);
+            let length = base + if (index as u64) < remainder { 1 } else { 0 };
             let range = ByteRange {
                 start,
                 end: start + length - 1,
