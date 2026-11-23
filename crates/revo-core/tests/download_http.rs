@@ -1,4 +1,4 @@
-use revo_core::download_to_file;
+use revo_core::{download_to_file, DownloadError};
 use std::{
     fs,
     io::{Read, Write},
@@ -79,6 +79,46 @@ fn serve_once(body: &'static [u8], honor_range: bool) -> (String, thread::JoinHa
     (format!("http://{address}/file"), handle)
 }
 
+
+fn serve_short_range(
+    body: &'static [u8],
+    start: usize,
+    count: usize,
+) -> (String, thread::JoinHandle<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let address = listener.local_addr().expect("server address");
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        loop {
+            let read = stream.read(&mut buffer).expect("read request");
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..read]);
+            if request.windows(4).any(|window| window == b"\\r\\n\\r\\n") {
+                break;
+            }
+        }
+        let request_text = String::from_utf8_lossy(&request).to_string();
+        let end = start + count - 1;
+        let payload = &body[start..=end];
+        write!(
+            stream,
+            "HTTP/1.1 206 Partial Content\\r\\nContent-Length: {}\\r\\nContent-Range: bytes {}-{}/{}\\r\\nConnection: close\\r\\n\\r\\n",
+            payload.len(),
+            start,
+            end,
+            body.len()
+        )
+        .expect("write partial headers");
+        stream.write_all(payload).expect("write partial body");
+        request_text
+    });
+    (format!("http://{address}/file"), handle)
+}
+
 #[tokio::test]
 async fn downloads_complete_http_response() {
     let body = b"complete download payload";
@@ -136,4 +176,24 @@ async fn restarts_partial_file_when_server_ignores_range() {
     assert_eq!(report.bytes_written, body.len() as u64);
     server.join().expect("server thread");
     fs::remove_file(path).expect("cleanup destination");
+}
+
+
+#[tokio::test]
+async fn rejects_partial_range_that_does_not_reach_end_of_file() {
+    let body = b"resumable download payload";
+    let split = 10;
+    let (url, server) = serve_short_range(body, split, 5);
+    let path = destination("short-range");
+    let part_path = PathBuf::from(format!("{}.part", path.display()));
+    fs::write(&part_path, &body[..split]).expect("write partial file");
+
+    let result = download_to_file(&reqwest::Client::new(), &url, &path).await;
+
+    assert!(matches!(result, Err(DownloadError::InvalidContentRange)));
+    let request = server.join().expect("server thread");
+    assert!(request.to_ascii_lowercase().contains("range: bytes=10-"));
+    assert!(!path.exists(), "incomplete response must not become final file");
+    assert_eq!(fs::read(&part_path).expect("read retained partial"), &body[..split]);
+    fs::remove_file(part_path).expect("cleanup partial file");
 }
