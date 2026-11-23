@@ -64,7 +64,9 @@ impl RevoApp {
                 .enable_all()
                 .build()
             {
-                Ok(runtime) => runtime.block_on(async move {
+                Ok(runtime) => {
+                    let task_state = Arc::clone(&shared);
+                    runtime.block_on(async move {
                     let task = tokio::spawn(async move {
                         let client = reqwest::Client::builder()
                             .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
@@ -83,7 +85,7 @@ impl RevoApp {
                         .map_err(|error| error.to_string())
                     });
 
-                    if let Ok(mut state) = shared.lock() {
+                    if let Ok(mut state) = task_state.lock() {
                         state.abort = Some(task.abort_handle());
                     }
 
@@ -94,7 +96,8 @@ impl RevoApp {
                         }
                         Err(error) => Err(format!("Download task failed: {error}")),
                     }
-                }),
+                })
+                },
                 Err(error) => Err(format!("Could not start the async runtime: {error}")),
             };
 
