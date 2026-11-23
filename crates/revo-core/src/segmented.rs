@@ -87,7 +87,12 @@ pub async fn download_segmented_to_file(
         Ok(response) if response.status().is_success() => response,
         _ => return sequential_fallback(client, url, &destination).await,
     };
-    let total = match head.content_length() {
+    let total = match head
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+    {
         Some(length) if length > 0 => length,
         _ => return sequential_fallback(client, url, &destination).await,
     };
