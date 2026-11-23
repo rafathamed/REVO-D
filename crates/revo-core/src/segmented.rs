@@ -72,7 +72,11 @@ pub async fn download_segmented_to_file(
 ) -> Result<SegmentedDownloadReport, SegmentedDownloadError> {
     let destination = destination.as_ref().to_path_buf();
     let part_path = append_suffix(&destination, ".part");
-    let has_partial = fs::metadata(&part_path).await.is_ok();
+    let has_partial = match fs::metadata(&part_path).await {
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error.into()),
+    };
     let connections = options.connections.max(1);
 
     if has_partial || connections == 1 {
