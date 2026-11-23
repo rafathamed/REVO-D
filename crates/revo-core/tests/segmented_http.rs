@@ -62,12 +62,15 @@ Connection: close\r
                 let range = request
                     .lines()
                     .find_map(|line| {
-                        let value = line.to_ascii_lowercase();
-                        let value = value.strip_prefix("range: bytes=")?;
-                        let (start, end) = value.trim().split_once('-')?;
+                        let (name, value) = line.split_once(':')?;
+                        if !name.trim().eq_ignore_ascii_case("range") {
+                            return None;
+                        }
+                        let value = value.trim().strip_prefix("bytes=")?;
+                        let (start, end) = value.split_once('-')?;
                         Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
                     })
-                    .expect("range header");
+                    .unwrap_or_else(|| panic!("range header missing in request: {request:?}"));
                 let (start, end) = range;
                 let payload = &body[start..=end];
                 write!(
