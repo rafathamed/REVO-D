@@ -5,7 +5,7 @@ use std::{
     net::TcpListener,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     thread,
@@ -21,15 +21,21 @@ fn destination() -> PathBuf {
     ))
 }
 
-fn serve_ranges(body: Vec<u8>, get_requests: usize) -> (String, thread::JoinHandle<()>) {
+fn serve_ranges(
+    body: Vec<u8>,
+    get_requests: usize,
+    retry_once: bool,
+) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let address = listener.local_addr().expect("server address");
     let body = Arc::new(body);
+    let retried = Arc::new(AtomicBool::new(false));
     let handle = thread::spawn(move || {
         let mut workers = Vec::new();
-        for _ in 0..=get_requests {
+        for _ in 0..=get_requests + usize::from(retry_once) {
             let (mut stream, _) = listener.accept().expect("accept request");
             let body = Arc::clone(&body);
+            let retried = Arc::clone(&retried);
             workers.push(thread::spawn(move || {
                 let mut request = Vec::new();
                 let mut buffer = [0_u8; 1024];
@@ -56,6 +62,15 @@ Connection: close\r
                         body.len()
                     )
                     .expect("write HEAD response");
+                    return;
+                }
+
+                if retry_once && !retried.swap(true, Ordering::SeqCst) {
+                    write!(
+                        stream,
+                        "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
+                    .expect("write transient error");
                     return;
                 }
 
@@ -102,7 +117,7 @@ async fn downloads_and_assembles_parallel_ranges_without_corruption() {
     let body: Vec<u8> = (0..(3 * 1024 * 1024 + 17))
         .map(|index| (index % 251) as u8)
         .collect();
-    let (url, server) = serve_ranges(body.clone(), 3);
+    let (url, server) = serve_ranges(body.clone(), 3, true);
     let path = destination();
     let client = reqwest::Client::new();
 
@@ -113,6 +128,7 @@ async fn downloads_and_assembles_parallel_ranges_without_corruption() {
         &SegmentedDownloadOptions {
             connections: 3,
             min_segment_size: 1024 * 1024,
+            retries: 2,
         },
     )
     .await
