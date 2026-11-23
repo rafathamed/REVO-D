@@ -67,7 +67,7 @@ impl RevoApp {
                 Ok(runtime) => {
                     let task_state = Arc::clone(&shared);
                     runtime.block_on(async move {
-                    let task = tokio::spawn(async move {
+                        let task = tokio::spawn(async move {
                         let client = reqwest::Client::builder()
                             .user_agent(concat!("REVO-D/", env!("CARGO_PKG_VERSION")))
                             .build()
@@ -83,20 +83,21 @@ impl RevoApp {
                         )
                         .await
                         .map_err(|error| error.to_string())
-                    });
+                        });
 
-                    if let Ok(mut state) = task_state.lock() {
-                        state.abort = Some(task.abort_handle());
-                    }
-
-                    match task.await {
-                        Ok(result) => result,
-                        Err(error) if error.is_cancelled() => {
-                            Err("Download cancelled. Any resumable partial data was retained.".to_owned())
+                        if let Ok(mut state) = task_state.lock() {
+                            state.abort = Some(task.abort_handle());
                         }
-                        Err(error) => Err(format!("Download task failed: {error}")),
-                    }
-                })
+
+                        match task.await {
+                            Ok(result) => result,
+                            Err(error) if error.is_cancelled() => Err(
+                                "Download cancelled. Any resumable partial data was retained."
+                                    .to_owned(),
+                            ),
+                            Err(error) => Err(format!("Download task failed: {error}")),
+                        }
+                    })
                 },
                 Err(error) => Err(format!("Could not start the async runtime: {error}")),
             };
@@ -111,7 +112,7 @@ impl RevoApp {
                         report.destination.display(),
                         report.segments
                     ),
-                    Err(error) => format!(" {error}").trim().to_owned(),
+                    Err(error) => error,
                 };
             }
         });
