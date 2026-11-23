@@ -13,7 +13,7 @@ A feature is considered complete only after automated tests, documented limitati
 ## Phase 1 — Download engine reliability
 
 - [x] HTTP/HTTPS single-stream downloads
-- [x] Resume from an existing partial file using HTTP Range and validate the returned starting offset
+- [x] Resume from an existing partial file using HTTP Range and validate the returned Content-Range boundaries and received byte count
 - [x] Stream to a temporary file, flush/sync, and rename on completion
 - [x] Concurrent segmented downloads with server capability detection
 - [x] Validate each segment's Content-Range and exact received byte count
