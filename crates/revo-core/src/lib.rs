@@ -148,3 +148,10 @@ mod tests {
         assert_eq!(parse_content_range("bytes nope"), None);
     }
 }
+
+
+mod segmented;
+pub use segmented::{
+    download_segmented_to_file, SegmentedDownloadError, SegmentedDownloadOptions,
+    SegmentedDownloadReport,
+};
